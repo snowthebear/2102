@@ -564,14 +564,19 @@ printFunctionCall other = prettyPrintExerciseC other
 
 
 isRecursiveCall :: String -> Int -> ADT -> Bool
-isRecursiveCall fname expectedParamLength (ReturnStatement (EmbeddedFunction f params))
-    | fname == f && length params == expectedParamLength = True
-isRecursiveCall fname expectedParamLength (IfStatement _ (Program adts)) = 
-    any (isRecursiveCall fname expectedParamLength) adts
-isRecursiveCall fname expectedParamLength (IfElseStatement _ (Program trueAdts) (Program falseAdts)) = 
-    any (isRecursiveCall fname expectedParamLength) trueAdts || any (isRecursiveCall fname expectedParamLength) falseAdts
+isRecursiveCall fname expectedParamLength (ReturnStatement (FunctionCall f params))
+    | trace ("Checking recursive call: " ++ fname ++ " with " ++ show params) fname == f && length params == expectedParamLength = True
+isRecursiveCall fname _ (IfStatement _ (ReturnStatement (FunctionCall f _)))
+    | trace ("Checking if statement body for recursion------") fname == f = False
+isRecursiveCall fname expectedParamLength (IfStatement _ body) = 
+    trace ("Checking IfStatement for recursion") isRecursiveCall fname expectedParamLength body
+isRecursiveCall fname expectedParamLength (IfElseStatement _ trueBody falseBody) = 
+    trace ("Checking IfElseStatement for recursion") isRecursiveCall fname expectedParamLength trueBody || isRecursiveCall fname expectedParamLength falseBody
+isRecursiveCall fname expectedParamLength (Block stmts) = 
+    trace ("Checking Block for recursion") any (isRecursiveCall fname expectedParamLength) stmts
+isRecursiveCall fname expectedParamLength (Program adts) = 
+    trace ("Checking Program for recursion") any (isRecursiveCall fname expectedParamLength) adts
 isRecursiveCall _ _ _ = False
-
 
 noRecursiveCallsExceptLast :: String -> [ADT] -> Bool
 noRecursiveCallsExceptLast fname stmts 
