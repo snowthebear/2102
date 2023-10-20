@@ -568,8 +568,10 @@ isRecursiveCall fname expectedParamLength (ReturnStatement (FunctionCall f param
     | trace ("Checking recursive call: " ++ fname ++ " with " ++ show params) fname == f && length params == expectedParamLength = True
 isRecursiveCall fname _ (IfStatement _ (ReturnStatement (FunctionCall f _)))
     | trace ("Checking if statement body for recursion------") fname == f = False
-isRecursiveCall fname expectedParamLength (IfStatement _ body) = 
-    trace ("Checking IfStatement for recursion") isRecursiveCall fname expectedParamLength body
+isRecursiveCall fname expectedParamLength (IfStatement _ body) 
+    | containsEmbeddedFunction body = trace "Found embedded function in IfStatement" False
+    | otherwise = trace ("Checking IfStatement for recursion") isRecursiveCall fname expectedParamLength body
+
 isRecursiveCall fname expectedParamLength (IfElseStatement _ trueBody falseBody) = 
     trace ("Checking IfElseStatement for recursion") isRecursiveCall fname expectedParamLength trueBody || isRecursiveCall fname expectedParamLength falseBody
 isRecursiveCall fname expectedParamLength (Block stmts) = 
@@ -582,21 +584,22 @@ noRecursiveCallsExceptLast :: String -> [ADT] -> Bool
 noRecursiveCallsExceptLast fname stmts 
     | null stmts = True
     | otherwise  = 
-        let noRecInInit = not $ any (containsRecursiveCall fname) (init stmts)
+        let noRecInInit = (not $ any (containsRecursiveCall fname) (init stmts))
             noRecInLast = not $ containsRecursiveCall fname (last stmts)
         in trace ("Checking last statement for recursion and all others for absence of recursion") noRecInInit && noRecInLast
 
 containsEmbeddedFunction :: ADT -> Bool
-containsEmbeddedFunction (FunctionCall _ _) = True
+containsEmbeddedFunction (EmbeddedFunction _ _) = True
 containsEmbeddedFunction (Block stmts) = any containsEmbeddedFunction stmts
 containsEmbeddedFunction (IfStatement _ body) = containsEmbeddedFunction body
 containsEmbeddedFunction (IfElseStatement _ trueBody falseBody) = 
     containsEmbeddedFunction trueBody || containsEmbeddedFunction falseBody
 containsEmbeddedFunction (ReturnStatement expr) = 
     case expr of
-        FunctionCall _ _ -> True
+        EmbeddedFunction _ _ -> True
         _ -> False
 containsEmbeddedFunction _ = False
+
 
 containsRecursiveCall :: String -> ADT -> Bool
 containsRecursiveCall fname (FunctionCall f _) = 
@@ -605,6 +608,13 @@ containsRecursiveCall fname (Block stmts) =
     trace ("Checking Block for recursion") any (containsRecursiveCall fname) stmts
 containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (FunctionCall f _)])) = 
      trace ("----Checking if statement body for recursion") True
+containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (EmbeddedFunction f _)])) = 
+     trace ("----Checking if statement body for recursion") True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Add lhs rhs)])) 
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = trace "Found embedded function in IfStatement" True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (BinaryOp str lhs rhs)])) 
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = trace "Found embedded function in IfStatement" True
+
 containsRecursiveCall fname (IfElseStatement _ trueBody falseBody) = 
     trace ("Checking IfElseStatement for recursion") containsRecursiveCall fname trueBody || containsRecursiveCall fname falseBody
 containsRecursiveCall fname (Program adts) = 
