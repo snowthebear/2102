@@ -12,7 +12,7 @@ import Parser
 import Control.Applicative
 import Data.List (intercalate, stripPrefix)
 import Data.Char
-import Debug.Trace --delete later
+import Control.Monad
 
 
 data ADT = IntLit Int
@@ -27,9 +27,9 @@ data ADT = IntLit Int
          | Or ADT ADT
          | Not ADT
          | Ternary ADT ADT ADT
-         | Equal ADT ADT        
-         | NotEqual ADT ADT     
-         | GreaterThan ADT ADT  
+         | Equal ADT ADT
+         | NotEqual ADT ADT
+         | GreaterThan ADT ADT
          | LessThan ADT ADT
          | Identifier String
          | Block [ADT] --B
@@ -47,18 +47,18 @@ data ADT = IntLit Int
             functionName :: String,
             functionParams :: [String],
             functionBody :: [ADT]
-         } 
+         }
          | WhileLoop ADT [ADT]
          | DestructureRecursion [String] [ADT]
          | Empty
   deriving (Eq, Show)
 
 chain :: Parser a -> Parser (a -> a -> a) -> Parser a
-chain p operator = do 
-    initialVal <- p 
+chain p operator = do
+    initialVal <- p
     continueParsing initialVal
   where
-    continueParsing val = (do 
+    continueParsing val = (do
                 opFunc <- operator
                 nextVal <- p
                 continueParsing (opFunc val nextVal)
@@ -67,7 +67,7 @@ chain p operator = do
 indent :: String -> String
 indent = unlines . map ("    " ++) . lines
 
-indentForWhile :: String -> String 
+indentForWhile :: String -> String
 indentForWhile = unlines . map ("        " ++) . lines
 
 isTok :: Char -> Parser Char
@@ -77,13 +77,13 @@ openParen :: Parser Char
 openParen = op '('
 
 closeParen :: Parser Char
-closeParen = op ')' 
+closeParen = op ')'
 
 openCurly :: Parser Char
 openCurly = op '{'
 
 closeCurly :: Parser Char
-closeCurly = op '}' 
+closeCurly = op '}'
 
 op :: Char -> Parser Char
 op c = spaces *> is c <* spaces
@@ -114,14 +114,14 @@ parseExpr :: Parser ADT
 parseExpr =
         parseFunctionStructure
         <|> parseBinaryOp
-        <|> parseTernary 
-        <|> parseOr 
-        <|> parseAnd 
+        <|> parseTernary
+        <|> parseOr
+        <|> parseAnd
         <|> parseNot
-        <|> parseComparison 
+        <|> parseComparison
         <|> parseEmbeddedFunction
         <|> parseFunctionCall
-        <|> parseArithmetic 
+        <|> parseArithmetic
         <|> parseConstDeclaration
         <|> parseElement
         <|> parseAllStatements
@@ -141,49 +141,49 @@ parseString = do
 -- parser for Boolean literals
 parseBool :: Parser ADT
 parseBool =
-    (opStr "true" *> pure (BoolLit True)) <|> 
+    (opStr "true" *> pure (BoolLit True)) <|>
     (opStr "false" *> pure (BoolLit False))
 
 parseList :: Parser ADT
 parseList = List <$> (spaces *> op '[' *> spaces *> sepBy parseElement (spaces *> op ',' <* spaces) <* spaces <* op ']' <* spaces)
 
 parseOr :: Parser ADT
-parseOr = 
+parseOr =
     openParen *> parseExpr <* opStr "||" <* spaces
     >>= \expr1 -> parseExpr <* closeParen
     >>= \expr2 -> pure $ Or expr1 expr2
 
 parseAnd :: Parser ADT
-parseAnd = 
+parseAnd =
     openParen *> parseExpr <* opStr "&&"
     >>= \expr1 -> parseExpr <* closeParen
     >>= \expr2 -> pure $ And expr1 expr2
 
 parseNot :: Parser ADT
-parseNot = 
+parseNot =
     openParen *> tok (opStr "!") *> parseExpr <* closeParen
     >>= \expr -> pure $ Not expr
 
 parseEqual :: Parser ADT
-parseEqual = 
+parseEqual =
     openParen *> parseExpr <* opStr "==="
     >>= \expr1 -> parseExpr <* closeParen
     >>= \expr2 -> pure $ Equal expr1 expr2
 
 
 parseComparison :: Parser ADT
-parseComparison = 
-    openParen *> parseElement <* spaces >>= \expr1 -> 
+parseComparison =
+    openParen *> parseElement <* spaces >>= \expr1 ->
     (   (opStr "===" *> pure Equal)
     <|> (opStr "!==" *> pure NotEqual)
     <|> (op '>' *> pure GreaterThan)
-    <|> (op '<' *> pure LessThan)   ) <* spaces >>= \compOp -> 
+    <|> (op '<' *> pure LessThan)   ) <* spaces >>= \compOp ->
     parseElement <* closeParen
-    >>= \expr2 -> 
+    >>= \expr2 ->
     pure $ compOp expr1 expr2
 
 parseTernary :: Parser ADT
-parseTernary = 
+parseTernary =
     openParen *> parseExpr <* opStr "?"
     >>= \condition -> parseExpr <* opStr ":"
     >>= \trueBranch -> parseExpr <* closeParen
@@ -217,14 +217,14 @@ parseTerm = chain parseFactor
               <|> (op '/' *> pure Divide))
 
 parseArithmetic :: Parser ADT
-parseArithmetic = chain parseTerm 
+parseArithmetic = chain parseTerm
                       ((op '+' *> pure Add)
                    <|> (op '-' *> pure Subtract))
 
 parseElement :: Parser ADT
-parseElement = parseInt 
-           <|> parseString 
-           <|> parseBool 
+parseElement = parseInt
+           <|> parseString
+           <|> parseBool
            <|> parseNot
            <|> parseList
            <|> surroundedBy openParen parseExpr closeParen
@@ -233,21 +233,20 @@ parseElement = parseInt
 
 parseIdentifier :: Parser ADT
 parseIdentifier = do
-    name <- identifier
-    pure $ Identifier name
+    Identifier <$> identifier
 
 multiline :: String -> Bool
 multiline str = length str > 42
 
 shouldPrintMultiline :: ADT -> Bool
-shouldPrintMultiline block@(Ternary cond trueBranch falseBranch) = 
-    multiline(prettyPrintExerciseA cond ++ " ? " ++ prettyPrintExerciseA trueBranch ++ ":" ++ prettyPrintExerciseA falseBranch)
+shouldPrintMultiline block@(Ternary cond trueBranch falseBranch) =
+    multiline (prettyPrintExerciseA cond ++ " ? " ++ prettyPrintExerciseA trueBranch ++ ":" ++ prettyPrintExerciseA falseBranch)
     || anyChildIsMultiline block
 shouldPrintMultiline block@(IfStatement cond trueBranch) =
-    multiline("if ( " ++ prettyPrintExerciseC cond ++ " ) " ++ prettyPrintExerciseC trueBranch)
+    multiline ("if ( " ++ prettyPrintExerciseC cond ++ " ) " ++ prettyPrintExerciseC trueBranch)
     || anyChildIsMultiline block
-shouldPrintMultiline block@(IfElseStatement cond trueBranch falseBranch) = 
-    multiline("if ( " ++ trim (prettyPrintExerciseA cond) ++ " ) " ++ prettyPrintBlock trueBranch ++ " else " ++ wrapWithBraces(prettyPrintExerciseBForBlock falseBranch))
+shouldPrintMultiline block@(IfElseStatement cond trueBranch falseBranch) =
+    multiline ("if ( " ++ trim (prettyPrintExerciseA cond) ++ " ) " ++ prettyPrintBlock trueBranch ++ " else " ++ wrapWithBraces (prettyPrintExerciseBForBlock falseBranch))
     || anyChildIsMultiline block
 shouldPrintMultiline _ = False
 
@@ -262,7 +261,7 @@ anyChildIsMultiline _ = False
 parseExerciseA :: Parser ADT
 parseExerciseA = parseExpr
 
-prettyPrintExerciseA :: ADT -> String 
+prettyPrintExerciseA :: ADT -> String
 prettyPrintExerciseA (Identifier name) = name
 prettyPrintExerciseA (IntLit n) = show n
 prettyPrintExerciseA (StringLit s) = "\"" ++ s ++ "\""
@@ -279,10 +278,10 @@ prettyPrintExerciseA (Equal e1 e2) = "(" ++ prettyPrintExerciseA e1 ++ " === " +
 prettyPrintExerciseA (NotEqual e1 e2) = "(" ++ prettyPrintExerciseA e1 ++ " !== " ++ prettyPrintExerciseA e2 ++ ")"
 prettyPrintExerciseA (GreaterThan e1 e2) = "(" ++ prettyPrintExerciseA e1 ++ " > " ++ prettyPrintExerciseA e2 ++ ")"
 prettyPrintExerciseA (LessThan e1 e2) = "(" ++ prettyPrintExerciseA e1 ++ " < " ++ prettyPrintExerciseA e2 ++ ")"
-prettyPrintExerciseA (Ternary cond trueBranch falseBranch) 
-    | shouldPrintMultiline (Ternary cond trueBranch falseBranch) = 
-        "(" ++ prettyPrintExerciseA cond ++ "\n? " ++ 
-        prettyPrintExerciseA trueBranch ++ "\n: " ++ 
+prettyPrintExerciseA (Ternary cond trueBranch falseBranch)
+    | shouldPrintMultiline (Ternary cond trueBranch falseBranch) =
+        "(" ++ prettyPrintExerciseA cond ++ "\n? " ++
+        prettyPrintExerciseA trueBranch ++ "\n: " ++
         prettyPrintExerciseA falseBranch ++ ")"
     | otherwise = "(" ++ prettyPrintExerciseA cond ++ " ? " ++ prettyPrintExerciseA trueBranch ++ " : " ++ prettyPrintExerciseA falseBranch ++ ")"
 prettyPrintExerciseA Empty = ""
@@ -295,10 +294,9 @@ prettyPrintExerciseA _ = ""
 -- Exercise 1
 identifier :: Parser String
 identifier = do
-    id <- some (alpha <|> digit <|> is '_')
-    if id `elem` reservedWords
-    then empty
-    else return id
+    ident <- some (alpha <|> digit <|> is '_')
+    guard (not (ident `elem` reservedWords))
+    return ident
 
 semicolon :: Parser Char
 semicolon = is ';'
@@ -309,15 +307,16 @@ reservedWords = ["if", "else", "const", "function", "return", "while", "for", "t
 parseSemicolon :: Parser Char
 parseSemicolon = spaces *> op ';' <* spaces
 
+spacesAround :: Parser a -> Parser a
+spacesAround p = spaces *> p <* spaces
+
 parseConstDeclaration :: Parser ADT
-parseConstDeclaration = do
-    _ <- opStr "const"
-    varName <- identifier
-    _ <- spaces *> op '=' <* spaces
-    expr <- parseEmbeddedFunction <|> parseExpr  
-    _ <- optional spaces  -- consume trailing spaces after the expression, if any
-    sem <- parseSemicolon
-    pure $ ConstDeclaration varName expr
+parseConstDeclaration = 
+    ConstDeclaration 
+        <$> (opStr "const" *> identifier <* spacesAround (op '='))
+        <*> (parseEmbeddedFunction <|> parseExpr)
+        <*  optional spaces 
+        <*  parseSemicolon
 
 parseMultipleConstDeclarations :: Parser ADT
 parseMultipleConstDeclarations = do
@@ -326,7 +325,7 @@ parseMultipleConstDeclarations = do
 
 
 prettyPrintConstDeclaration :: ADT -> String
-prettyPrintConstDeclaration (ConstDeclaration varName expr) = 
+prettyPrintConstDeclaration (ConstDeclaration varName expr) =
     "const " ++ varName ++ " = " ++ trim (prettyPrintExerciseA expr) ++ ";"
 
 -- Exercise 2
@@ -350,7 +349,7 @@ parseBlock = do
     statements <- many (spaces *> parseStatement <* spaces <* optional parseSemicolon <* spaces)
     _ <- closeCurly
     pure $ Block statements
-    
+
 
 shouldPrintMultilineIfElse :: ADT -> Bool
 shouldPrintMultilineIfElse (IfElseStatement _ trueBranch falseBranch) =
@@ -359,7 +358,7 @@ shouldPrintMultilineIfElse _ = False
 
 totalElements :: ADT -> Int -- Helper to count the total elements
 totalElements (Block stmts) = sum $ map totalElements stmts
-totalElements (IfElseStatement _ trueBranch falseBranch) = 
+totalElements (IfElseStatement _ trueBranch falseBranch) =
     1 + totalElements trueBranch + totalElements falseBranch
 totalElements (IfStatement _ trueBranch) = 1 + totalElements trueBranch
 totalElements _ = 1
@@ -367,16 +366,16 @@ totalElements _ = 1
 
 prettyPrintBlock :: ADT -> String
 prettyPrintBlock (IfStatement condition trueBranch)
-    | shouldPrintMultiline (IfStatement condition trueBranch) = 
+    | shouldPrintMultiline (IfStatement condition trueBranch) =
         "if ( " ++ prettyPrintExerciseB condition ++ " )" ++
         (prettyPrintExerciseB trueBranch)
-    | otherwise = 
-        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++ 
-        wrapWithBraces(prettyPrintExerciseBForBlock trueBranch)
-prettyPrintBlock stmt@(IfElseStatement condition trueBranch falseBranch) 
+    | otherwise =
+        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++
+        wrapWithBraces (prettyPrintExerciseBForBlock trueBranch)
+prettyPrintBlock stmt@(IfElseStatement condition trueBranch falseBranch)
     | shouldPrintMultiline stmt =
         "if ( " ++ trim (prettyPrintExerciseA condition) ++ " ) {\n" ++ indent (prettyPrintExerciseBForBlock trueBranch) ++ "\n} else {\n" ++ indent (prettyPrintExerciseBForBlock falseBranch) ++ "\n}"
-    | otherwise = 
+    | otherwise =
         "if ( " ++ trim (prettyPrintExerciseA condition) ++ " ) " ++ prettyPrintExerciseBForBlock trueBranch ++ " else " ++ prettyPrintExerciseBForBlock falseBranch
 prettyPrintBlock (Block []) = "{ }"
 prettyPrintBlock block@(Block [innerBlock@(Block _)]) = prettyPrintBlock innerBlock
@@ -394,11 +393,11 @@ prettyPrintBlock (Program adts) = intercalate "\n" $ map prettyPrintExerciseB ad
 
 
 prettyPrintExerciseBForBlock :: ADT -> String
-prettyPrintExerciseBForBlock (ConstMultiDeclarations adts) = 
+prettyPrintExerciseBForBlock (ConstMultiDeclarations adts) =
     intercalate "\n" $ map prettyPrintConstDeclaration adts
 prettyPrintExerciseBForBlock (Block []) = ""
-prettyPrintExerciseBForBlock block@(Block stmts) 
-    | not (shouldPrintMultiline block) && totalElements block == 1 = 
+prettyPrintExerciseBForBlock block@(Block stmts)
+    | not (shouldPrintMultiline block) && totalElements block == 1 =
         intercalate "\n" $ map (trim . prettyPrintExerciseBForBlock) stmts
     | otherwise = wrapWithBraces (intercalate "\n" $ map (trim . prettyPrintExerciseBForBlock) stmts)
 prettyPrintExerciseBForBlock adt = prettyPrintExerciseB adt
@@ -419,38 +418,31 @@ many1 p = (:) <$> p <*> many p
 
 
 parseConstAndBlock :: Parser ADT
-parseConstAndBlock = do
-    declarations <- many1 (parseConstDeclaration <* spaces <* optional parseSemicolon <* spaces)
-    stmtOrBlock <- optional (parseBlock <|> parseStatementAfterConst)
-    case stmtOrBlock of
-        Just (Block stmts) -> return $ ConstAndBlock declarations (Block $ declarations ++ stmts)
-        Just s  -> return $ ConstAndBlock declarations s
-        Nothing -> return $ ConstMultiDeclarations declarations
-
-
-parseConstsThenIf :: Parser ADT
-parseConstsThenIf = do
-    decls <- many1 (parseConstDeclaration <* spaces <* optional parseSemicolon <* spaces)
-    stmt <- parseIf
-    pure $ ConstAndBlock decls stmt
+parseConstAndBlock = combine <$> declarationsParser <*> optional stmtOrBlockParser
+  where
+    semcol = spaces *> optional parseSemicolon *> spaces
+    declarationsParser = many1 (parseConstDeclaration <* semcol)
+    stmtOrBlockParser = parseBlock <|> parseStatementAfterConst
+    combine decls (Just (Block stmts)) = ConstAndBlock decls (Block $ decls ++ stmts)
+    combine decls (Just s)             = ConstAndBlock decls s
+    combine decls Nothing              = ConstMultiDeclarations decls
 
 parseStatementAfterConst :: Parser ADT
 parseStatementAfterConst = parseBlock
                        <|> parseIf
-                       <|> parseMultipleConstDeclarations 
+                       <|> parseMultipleConstDeclarations
                        <|> parseConstDeclaration
                        <|> parseIdentifier
 
 parseStatement :: Parser ADT
 parseStatement = parseReturn
             <|> parseIf
-            <|> parseConstsThenIf
             <|> parseConstAndBlock
-            <|> parseMultipleConstDeclarations 
+            <|> parseMultipleConstDeclarations
             <|> parseConstDeclaration
             <|> parseFunctionCall
             <|> parseEmbeddedFunction
-            <|> parseIdentifier 
+            <|> parseIdentifier
             <|> parseFullExpression
 
 parseAllStatements :: Parser ADT
@@ -471,22 +463,21 @@ prettyPrintExerciseB (Identifier varName) = varName
 prettyPrintExerciseB block@(Block _) = prettyPrintBlock block
 prettyPrintExerciseB (Program adts) = intercalate "\n" $ map prettyPrintExerciseB adts
 prettyPrintExerciseB (ConstDeclaration varName expr) = "const " ++ varName ++ " = " ++ trim (prettyPrintExerciseA expr) ++ ";"
-prettyPrintExerciseB (ConstMultiDeclarations adts) = 
+prettyPrintExerciseB (ConstMultiDeclarations adts) =
     intercalate ";\n" $ map prettyPrintConstDeclaration adts
 prettyPrintExerciseB (IfStatement condition trueBranch)
-    | shouldPrintMultiline (IfStatement condition trueBranch) = 
-        "if ( " ++ prettyPrintExerciseC condition ++ " )" ++
-        (prettyPrintExerciseC trueBranch)
-    | otherwise = 
-        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++ 
-        wrapWithBraces(prettyPrintExerciseBForBlock trueBranch)
-prettyPrintExerciseB (IfElseStatement condition trueBranch falseBranch) 
+    | shouldPrintMultiline (IfStatement condition trueBranch) =
+        "if ( " ++ prettyPrintExerciseC condition ++ " )" ++ prettyPrintExerciseC trueBranch
+    | otherwise =
+        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++
+        wrapWithBraces (prettyPrintExerciseBForBlock trueBranch)
+prettyPrintExerciseB (IfElseStatement condition trueBranch falseBranch)
     | shouldPrintMultiline (IfElseStatement condition trueBranch falseBranch)  =
-        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) {\n" ++ indent(prettyPrintExerciseBForBlock trueBranch) ++ 
+        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) {\n" ++ indent (prettyPrintExerciseBForBlock trueBranch) ++
         "} else {\n" ++ indent (prettyPrintExerciseBForBlock falseBranch) ++ "}"
-    | otherwise = 
-        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++ prettyPrintBlock trueBranch ++ 
-        " else " ++ wrapWithBraces(prettyPrintExerciseBForBlock falseBranch)
+    | otherwise =
+        "if ( " ++ trim (prettyPrintExerciseB condition) ++ " ) " ++ prettyPrintBlock trueBranch ++
+        " else " ++ wrapWithBraces (prettyPrintExerciseBForBlock falseBranch)
 prettyPrintExerciseB (ReturnStatement expr) = "return " ++ trim (prettyPrintExerciseC expr) ++ ";"
 prettyPrintExerciseB (ConstAndBlock decls stmt) = prettyPrintConstsAndStatement (ConstAndBlock decls stmt)
 prettyPrintExerciseB adt = prettyPrintExerciseA adt
@@ -526,17 +517,17 @@ parseEmbeddedFunction = do
 
 
 parseFullExpression :: Parser ADT
-parseFullExpression = 
+parseFullExpression =
          parseFunctionStructure
         <|> parseBinaryOpParen
         <|> parseParenExpr
         <|> parseIf
         <|> parseFunctionCall
-        <|> parseArithmetic 
+        <|> parseArithmetic
         <|> parseEmbeddedFunction
         <|> parseElement
-        
-        
+
+
 -- Exercise 2
 
 parseFunctionStructure :: Parser ADT
@@ -558,91 +549,83 @@ parseReturn = do
 
 
 printFunctionCall :: ADT -> String
-printFunctionCall (FunctionCall name params) = 
+printFunctionCall (FunctionCall name params) =
     name ++ "(" ++ intercalate ", " (map printFunctionCall params) ++ ")"
 printFunctionCall other = prettyPrintExerciseC other
 
 
 isRecursiveCall :: String -> Int -> ADT -> Bool
 isRecursiveCall fname expectedParamLength (ReturnStatement (FunctionCall f params))
-    | trace ("Checking recursive call: " ++ fname ++ " with " ++ show params) fname == f && length params == expectedParamLength = True
+    | fname == f && length params == expectedParamLength = True
 isRecursiveCall fname _ (IfStatement _ (ReturnStatement (FunctionCall f _)))
-    | trace ("Checking if statement body for recursion------") fname == f = False
-isRecursiveCall fname expectedParamLength (IfStatement _ body) 
-    | containsEmbeddedFunction body = trace "Found embedded function in IfStatement" False
-    | otherwise = trace ("Checking IfStatement for recursion") isRecursiveCall fname expectedParamLength body
-
-isRecursiveCall fname expectedParamLength (IfElseStatement _ trueBody falseBody) = 
-    trace ("Checking IfElseStatement for recursion") isRecursiveCall fname expectedParamLength trueBody || isRecursiveCall fname expectedParamLength falseBody
-isRecursiveCall fname expectedParamLength (Block stmts) = 
-    trace ("Checking Block for recursion") any (isRecursiveCall fname expectedParamLength) stmts
-isRecursiveCall fname expectedParamLength (Program adts) = 
-    trace ("Checking Program for recursion") any (isRecursiveCall fname expectedParamLength) adts
+    | fname == f = False
+isRecursiveCall fname expectedParamLength (IfStatement _ body)
+    | containsEmbeddedFunction body = False
+    | otherwise = isRecursiveCall fname expectedParamLength body
+isRecursiveCall fname expectedParamLength (IfElseStatement _ trueBody falseBody) =
+    isRecursiveCall fname expectedParamLength trueBody || isRecursiveCall fname expectedParamLength falseBody
+isRecursiveCall fname expectedParamLength (Block stmts) =
+    any (isRecursiveCall fname expectedParamLength) stmts
+isRecursiveCall fname expectedParamLength (Program adts) =
+    any (isRecursiveCall fname expectedParamLength) adts
 isRecursiveCall _ _ _ = False
 
+
 noRecursiveCallsExceptLast :: String -> [ADT] -> Bool
-noRecursiveCallsExceptLast fname stmts 
+noRecursiveCallsExceptLast fname stmts
     | null stmts = True
-    | otherwise  = 
+    | otherwise  =
         let noRecInInit = (not $ any (containsRecursiveCall fname) (init stmts))
             noRecInLast = not $ containsRecursiveCall fname (last stmts)
-        in trace ("Checking last statement for recursion and all others for absence of recursion") noRecInInit && noRecInLast
+        in noRecInInit && noRecInLast
 
 containsEmbeddedFunction :: ADT -> Bool
 containsEmbeddedFunction (EmbeddedFunction _ _) = True
 containsEmbeddedFunction (Block stmts) = any containsEmbeddedFunction stmts
 containsEmbeddedFunction (IfStatement _ body) = containsEmbeddedFunction body
-containsEmbeddedFunction (IfElseStatement _ trueBody falseBody) = 
+containsEmbeddedFunction (IfElseStatement _ trueBody falseBody) =
     containsEmbeddedFunction trueBody || containsEmbeddedFunction falseBody
-containsEmbeddedFunction (ReturnStatement expr) = 
-    case expr of
-        EmbeddedFunction _ _ -> True
-        _ -> False
+containsEmbeddedFunction (ReturnStatement (EmbeddedFunction _ _)) = True
 containsEmbeddedFunction _ = False
 
 
 containsRecursiveCall :: String -> ADT -> Bool
-containsRecursiveCall fname (FunctionCall f _) = 
-    trace ("Checking for recursion: " ++ fname) fname == f
-containsRecursiveCall fname (Block stmts) = 
-    trace ("Checking Block for recursion") any (containsRecursiveCall fname) stmts
-containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (FunctionCall f _)])) = 
-     trace ("----Checking if statement body for recursion") True
-containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (EmbeddedFunction f _)])) = 
-     trace ("----Checking if statement body for recursion") True
-containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Add lhs rhs)])) 
-    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = trace "Found embedded function in IfStatement" True
-containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (BinaryOp str lhs rhs)])) 
-    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = trace "Found embedded function in IfStatement" True
-
-containsRecursiveCall fname (IfElseStatement _ trueBody falseBody) = 
-    trace ("Checking IfElseStatement for recursion") containsRecursiveCall fname trueBody || containsRecursiveCall fname falseBody
-containsRecursiveCall fname (Program adts) = 
-    trace ("Checking Program for recursion") any (containsRecursiveCall fname) adts
+containsRecursiveCall fname (FunctionCall f _) = fname == f
+containsRecursiveCall fname (Block stmts) = any (containsRecursiveCall fname) stmts
+containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (FunctionCall f _)])) = True
+containsRecursiveCall fname (IfStatement _ (Block[ReturnStatement (EmbeddedFunction f _)])) = True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Add lhs rhs)]))
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (BinaryOp str lhs rhs)]))
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Subtract lhs rhs)]))
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Multiply lhs rhs)]))
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = True
+containsRecursiveCall fname (IfStatement _ (Block [ReturnStatement (Divide lhs rhs)]))
+    | containsEmbeddedFunction lhs || containsEmbeddedFunction rhs = True
+containsRecursiveCall fname (IfElseStatement _ trueBody falseBody) =
+    containsRecursiveCall fname trueBody || containsRecursiveCall fname falseBody
+containsRecursiveCall fname (Program adts) = any (containsRecursiveCall fname) adts
 containsRecursiveCall _ _ = False
 
 
 isTailRecursive :: String -> Bool
-isTailRecursive str = 
-    case parse parseExerciseC str of
-        Result _ (Program [FunctionStructure name params [Block body]]) -> isTailRec name params body
-        _ -> False
+isTailRecursive = isTailRecParsedResult . parse parseExerciseC
   where
-    isTailRec name params body
-        | null body = False
-        | otherwise =
-            let noRec = noRecursiveCallsExceptLast name body
-                expectedParamLength = length params
-                tailRec = isRecursiveCall name expectedParamLength (last body)
-            in trace ("No recursion in statements except last: " ++ show noRec ++ ". Last statement is tail recursive: " ++ show tailRec) noRec && tailRec
+    isTailRecParsedResult (Result _ (Program [FunctionStructure name params [Block body]])) = isTailRec name params body
+    isTailRecParsedResult _ = False
+
+    isTailRec name params body = case body of
+        []     -> False
+        _      -> noRecursiveCallsExceptLast name body && isRecursiveCall name (length params) (last body)
+
 
 
 flattenStatements :: [ADT] -> [ADT]
 flattenStatements [] = []
 flattenStatements ((Block stmts):rest) = flattenStatements stmts ++ flattenStatements rest
 flattenStatements ((Program stmts):rest) = flattenStatements stmts ++ flattenStatements rest
-flattenStatements ((IfStatement cond (Program progStmts)):rest) = 
-    IfStatement cond (Program (flattenStatements progStmts)) : flattenStatements rest
 flattenStatements (stmt:rest) = stmt : flattenStatements rest
 
 
@@ -667,33 +650,24 @@ extractParamsFromReturn (Block stmts)
     | otherwise = extractParamsFromReturn (last stmts)
 extractParamsFromReturn _ = []
 
-transformBody :: [String] -> [ADT] -> [ADT]
-transformBody params body = 
-    let flattenedBody = flattenStatements body
-    in if isTailRecReturn (last flattenedBody) then
-           replaceTailRecWithDestructure flattenedBody
-       else
-           map (transformNonTailRecursiveReturn params) flattenedBody
-  where
-    replaceTailRecWithDestructure :: [ADT] -> [ADT]
-    replaceTailRecWithDestructure stmts 
-        | null stmts = []
-        | isTailRecReturn (last stmts) = 
-            init stmts ++ [DestructureRecursion params (extractParamsFromReturn $ last stmts)]
-        | otherwise = stmts 
 
-    transformNonTailRecursiveReturn :: [String] -> ADT -> ADT
+transformBody :: [String] -> [ADT] -> [ADT]
+transformBody params = handleTailRecursion . flattenStatements
+  where
+    handleTailRecursion stmts
+        | isTailRecReturn (last stmts) = init stmts ++ [DestructureRecursion params (extractParamsFromReturn $ last stmts)]
+        | otherwise = map (transformNonTailRecursiveReturn params) stmts
     transformNonTailRecursiveReturn params (Block stmts) = Block (map (transformNonTailRecursiveReturn params) stmts)
-    transformNonTailRecursiveReturn params stmt = stmt
+    transformNonTailRecursiveReturn _ stmt = stmt
 
 
 adtToString :: ADT -> String
-adtToString (WhileLoop cond body) = 
-    "while (" ++ prettyPrintExerciseC cond ++ ") {\n" 
+adtToString (WhileLoop cond body) =
+    "while (" ++ prettyPrintExerciseC cond ++ ") {\n"
     ++ concatMap (\stmt -> "    " ++ adtToString stmt ++ "\n") body
     ++ "}"
 adtToString (FunctionStructure name params body) =
-    "function " ++ name ++ "(" ++ intercalate ", " params ++ ") " 
+    "function " ++ name ++ "(" ++ intercalate ", " params ++ ") "
         ++ intercalate "\n" (map prettyPrintExerciseC body)
 adtToString _ = ""
 
@@ -703,11 +677,11 @@ prettyPrintStatementWithoutBraces (Block stmts) = "{\n" ++ (indent $ concatMap (
 prettyPrintStatementWithoutBraces (DestructureRecursion vars vals) =
     "[" ++ intercalate ", " vars ++ "] = [" ++ intercalate ", " (map prettyPrintStatementWithoutBraces vals) ++ "];"
 prettyPrintStatementWithoutBraces (IfStatement cond trueBranch)
-    | shouldPrintMultiline (IfStatement cond trueBranch) = 
-        "if ( " ++ prettyPrintExerciseC cond ++ " ) " 
+    | shouldPrintMultiline (IfStatement cond trueBranch) =
+        "if ( " ++ prettyPrintExerciseC cond ++ " ) "
         ++  (prettyPrintExerciseC trueBranch)
-    | otherwise = 
-        "if ( " ++ prettyPrintExerciseC cond ++ " ) " ++ wrapWithBraces(prettyPrintExerciseBForBlock trueBranch) 
+    | otherwise =
+        "if ( " ++ prettyPrintExerciseC cond ++ " ) " ++ wrapWithBraces (prettyPrintExerciseBForBlock trueBranch)
 prettyPrintStatementWithoutBraces otherStmt = trim (prettyPrintExerciseC otherStmt)
 
 
@@ -715,46 +689,46 @@ parseExerciseC :: Parser ADT
 parseExerciseC = parseAllStatements
              <|> parseReturn
              <|> parseExpr
-             <|> parseFullExpression  
+             <|> parseFullExpression
              <|> parseBlock
-        
+
 prettyPrintExerciseC :: ADT -> String
 prettyPrintExerciseC (Program adts) = intercalate "\n" $ map prettyPrintExerciseC adts
-prettyPrintExerciseC (FunctionCall name params) = 
+prettyPrintExerciseC (FunctionCall name params) =
     name ++ "(" ++ intercalate ", " (map prettyPrintExerciseC params) ++ ");"
-prettyPrintExerciseC (EmbeddedFunction name params) = 
+prettyPrintExerciseC (EmbeddedFunction name params) =
     name ++ "(" ++ intercalate ", " (map prettyPrintExerciseC params) ++ ")"
-prettyPrintExerciseC func@(FunctionStructure name params body)  
-    | isTailRecursive (adtToString func) = 
-        "function " ++ name ++ "(" ++ intercalate ", " params ++ ") { \n" ++ 
+prettyPrintExerciseC func@(FunctionStructure name params body)
+    | isTailRecursive (adtToString func) =
+        "function " ++ name ++ "(" ++ intercalate ", " params ++ ") { \n" ++
         "    while (true) { \n" ++
         indentForWhile (concatMap (\stmt -> prettyPrintStatementWithoutBraces stmt ++ "\n") (transformBody params body)) ++
         "    }\n" ++
         "}"
-    | otherwise = 
-        "function " ++ name ++ "(" ++ intercalate ", " params ++ ") " 
+    | otherwise =
+        "function " ++ name ++ "(" ++ intercalate ", " params ++ ") "
         ++ intercalate "\n" (map prettyPrintExerciseC body)
-prettyPrintExerciseC (ReturnStatement expr) =  "return " ++ trim(prettyPrintExerciseC expr) ++ ";"
+prettyPrintExerciseC (ReturnStatement expr) =  "return " ++ trim (prettyPrintExerciseC expr) ++ ";"
 prettyPrintExerciseC (Identifier varName) = varName
 prettyPrintExerciseC (ConstDeclaration varName expr) = "const " ++ varName ++ " = " ++ printFunctionCall expr ++ ";"
-prettyPrintExerciseC (ConstMultiDeclarations adts) = 
+prettyPrintExerciseC (ConstMultiDeclarations adts) =
     intercalate "\n" $ map prettyPrintExerciseC adts
 prettyPrintExerciseC stmt@(IfStatement cond trueBranch)
-    | shouldPrintMultiline stmt = 
+    | shouldPrintMultiline stmt =
         "if ( " ++ prettyPrintExerciseC cond ++ " ) {\n" ++
         indent (prettyPrintExerciseC trueBranch) ++ "\n}"
-    | otherwise = 
-        "if ( " ++ prettyPrintExerciseC cond ++ " ) " ++ 
-        wrapWithBraces(prettyPrintExerciseBForBlock trueBranch)
+    | otherwise =
+        "if ( " ++ prettyPrintExerciseC cond ++ " ) " ++
+        wrapWithBraces (prettyPrintExerciseBForBlock trueBranch)
 prettyPrintExerciseC stmt@(IfElseStatement cond trueBranch falseBranch)
     | shouldPrintMultiline stmt =
-        "if ( " ++ trim (prettyPrintExerciseB cond) ++ " ) {\n" ++ indent (prettyPrintExerciseBForBlock trueBranch) ++ 
+        "if ( " ++ trim (prettyPrintExerciseB cond) ++ " ) {\n" ++ indent (prettyPrintExerciseBForBlock trueBranch) ++
         "\n} else {\n" ++ indent (prettyPrintExerciseBForBlock falseBranch) ++ "\n}"
-    | otherwise = 
-        "if ( " ++ trim (prettyPrintExerciseA cond) ++ " ) " ++ prettyPrintExerciseBForBlock trueBranch ++ 
+    | otherwise =
+        "if ( " ++ trim (prettyPrintExerciseA cond) ++ " ) " ++ prettyPrintExerciseBForBlock trueBranch ++
         " else " ++ prettyPrintExerciseBForBlock falseBranch
 prettyPrintExerciseC (StringLit s) = "\"" ++ s ++ "\""
-prettyPrintExerciseC (BinaryOp op a b) = 
+prettyPrintExerciseC (BinaryOp op a b) =
     let leftStr = case a of
                      BinaryOp _ _ _ -> "(" ++ prettyPrintExerciseC a ++ ")"
                      _              -> prettyPrintExerciseC a
